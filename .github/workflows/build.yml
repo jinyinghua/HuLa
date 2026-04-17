@@ -1,0 +1,79 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ master ]  # 当代码推送到 master 分支时触发
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:      # 允许手动触发
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 1. 安装 Rust 环境 (Tauri 核心)
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # 添加 Android 编译目标
+          targets: aarch64-linux-android, armv7-linux-androideabi, i686-linux-android, x86_64-linux-android
+
+      # 2. 设置 Java 环境 (Android 编译必备)
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17' # Android 开发推荐使用 JDK 17
+
+      # 3. 设置 Node.js 和 pnpm (项目文档要求 pnpm >= 10.x)
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      # 4. 安装 Linux 系统依赖 (Tauri 在 Linux 下编译需要的库)
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.0-dev \
+            build-essential \
+            curl \
+            wget \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      # 5. 安装 Android SDK 和 NDK
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # 6. 安装项目依赖
+      - name: Install dependencies
+        run: pnpm install
+
+      # 7. 执行 Android 构建
+      # 注意：如果你没有配置签名，这里通常会生成一个未签名的 release APK 或 debug APK
+      - name: Build Android APK
+        run: pnpm tauri android build
+        env:
+          NDK_HOME: ${{ steps.setup-android.outputs.ndk-path }}
+
+      # 8. 上传构建好的 APK 文件到 GitHub Artifacts
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HuLa-Android-APK
+          # Tauri Android 默认输出路径通常在 src-tauri/gen/android 下
+          path: src-tauri/gen/android/**/*.apk
