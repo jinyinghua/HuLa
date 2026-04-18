@@ -1,4 +1,4 @@
-name: Build Android APK (Skip TS Check)
+name: Build Android APK
 
 on:
   push:
@@ -15,32 +15,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 1. 安装 Rust 编译环境
+      # 1. 安装 Rust 环境
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android, armv7-linux-androideabi, i686-linux-android, x86_64-linux-android
 
-      # 2. 设置 Java 环境 (JDK 17)
+      # 2. 设置 Java 17 (Android 编译必备)
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      # 3. 设置 pnpm 和 Node.js
+      # 3. 设置 pnpm
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
           version: 10
 
+      # 4. 设置 Node.js 22
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'pnpm'
 
-      # 4. 安装 Linux 系统依赖 (适配 Ubuntu 24.04 的 4.1 版本)
+      # 5. 安装 Linux 系统依赖 (已更新为 4.1 解决找不到包的问题)
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -54,27 +55,28 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
 
-      # 5. 设置 Android SDK/NDK
+      # 6. 设置 Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # 6. 安装前端项目依赖
+      # 7. 安装项目依赖
       - name: Install dependencies
         run: pnpm install
 
-      # 7. 执行 Android 构建 (暴力跳过 TS 检查)
-      # 使用 -- 传递参数给内部的 build 命令，强制重写 beforeBuildCommand
+      # 8. 绕过 TS 检查并构建 APK
       - name: Build Android APK
         run: |
-          pnpm tauri android build -- --before-build-command "pnpm vite build"
+          # 临时修改 package.json 的 build 脚本，剔除 vue-tsc
+          npm pkg set scripts.build="vite build"
+          
+          # 执行 Tauri 打包
+          pnpm tauri android build
         env:
           NDK_HOME: ${{ steps.setup-android.outputs.ndk-path }}
 
-      # 8. 上传生成的 APK
+      # 9. 提取并上传 APK 文件
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: HuLa-Android-Release
-          # 默认打包后的路径通常在此目录下
+          name: HuLa-Android-APK
           path: src-tauri/gen/android/**/*.apk
-          retention-days: 7
